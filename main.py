@@ -429,7 +429,7 @@ else:
     f = open('msg.pt', 'tw', encoding='utf-8')
     f.close
 
-bot.send_message(my_id, "Ржавый пень запущен", reply_markup=menu_keyboard)
+bot.send_message(my_id, "WindowsToolsBot запущен", reply_markup=menu_keyboard)
 
 @bot.message_handler(content_types=["text"])
 def get_text_messages(message):
