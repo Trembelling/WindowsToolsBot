@@ -14,15 +14,13 @@ import tkinter as tk
 from psutil import process_iter
 from win10toast import ToastNotifier
 import psutil
-import subprocess
-import pyperclip
 import pyautogui
-import cv2
 import numpy as np
 import threading
 import string
 import random
 import mouse
+from methods_windowstools import *
 
 config_file = 'config.json'
 my_id = None
@@ -30,6 +28,7 @@ bot_token = None
 is_recording = False
 bot = None
 curs_range = 50
+password_to_change_account = "your_password"
 
 def id_user_tg():
     global my_id, bot_token
@@ -97,6 +96,8 @@ if my_id is None or bot_token is None:
 else:
     initialize_bot()  
 
+
+
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     if str(message.from_user.id) == my_id:
@@ -105,24 +106,25 @@ def send_welcome(message):
     else:
         bot.send_message(message.chat.id, "Доступ запрещен.")
 
-def send_main_menu(message):
-    keyboard = types.InlineKeyboardMarkup(row_width=2)
-    keyboard.add(
-        types.InlineKeyboardButton(text="📷 Сделать скриншот", callback_data="screenshot"),
-        types.InlineKeyboardButton(text="🖱 Управление мышкой", callback_data="mouse_control"),
-        types.InlineKeyboardButton(text="📂 Файлы и процессы", callback_data="files_and_processes"),
-        types.InlineKeyboardButton(text="❇️ Дополнительно", callback_data="additional_options"),
-        types.InlineKeyboardButton(text="📩 Отправка уведомления", callback_data="send_notification"),
-        types.InlineKeyboardButton(text="🎥 Записать экран", callback_data="record_screen"),
-        types.InlineKeyboardButton(text="🎥 Остановить запись", callback_data="record_stop"),
-        types.InlineKeyboardButton(text="📝 Вставить текст", callback_data="insert_text"),
-        types.InlineKeyboardButton(text="❗️ Информация", callback_data="info"),
-        types.InlineKeyboardButton(text="👾 Для профессионалов", callback_data="professionals"),
-        types.InlineKeyboardButton(text="⌨️ Эмулировать нажатие клавиш", callback_data="emulate_keys"),
-        types.InlineKeyboardButton(text="🔒 Заблокировать ввод", callback_data="block_input"),
-        types.InlineKeyboardButton(text="🔓 Разблокировать ввод", callback_data="unblock_input")
-    )
-    bot.send_message(my_id, "Выберите действие", reply_markup=keyboard)
+@bot.message_handler(commands=['reg_new_account'])
+def reg_new_account(message):
+    global new_id
+    if message.text[17:] == password_to_change_account:
+        new_id = message.from_user.id
+        with open(config_file, 'w') as f:
+            json.dump({"my_id": new_id, "bot_token": bot_token}, f)
+        load_my_id()
+        bot.send_message(message.from_user.id, "Пароль Верный, перезапустите бота")
+    else:
+        bot.send_message(message.chat.id, "Неправильный пароль.")
+
+
+def send_first_msg(id):
+    bot.send_photo(my_id, "https://i.imgur.com/qrK0FaT.png", caption="Добро пожаловать в WindowsToolBot! Выберите действие из меню ниже.")
+    send_main_menu(id)
+
+send_first_msg(my_id)
+
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
@@ -135,7 +137,6 @@ def callback_query(call):
     "additional_options": handle_additional_options,
     "send_notification": handler_send_notify,
     "record_screen": start_recording,
-    "record_stop": stop_recording,
     "insert_text": handle_insert_text,
     "professionals": handle_professionals,
     "emulate_keys": handle_emulate_keys,
@@ -150,6 +151,9 @@ def callback_query(call):
         elif call.data == "info":
             bot.send_message(my_id, info_msg, parse_mode="markdown")
             send_main_menu(call)
+        elif call.data == "record_stop":
+            stop_recording(call)
+            send_main_menu(call.message)
         elif call.data == "unblock_input":
             handle_unblock_input(call)
         elif call.data == "start_process":
@@ -239,8 +243,6 @@ def callback_query(call):
             bot.send_message(my_id, numbered_processes)
                 
             bot.send_message(my_id, 'Хотите ли вы завершить какой-нибудь процесс? (да/нет)')
-            bot.register_next_step_handler(call.message, confirm_kill_process)  
-            bot.register_next_step_handler(call.message, addons_process)
             send_main_menu()
 
 def handle_professionals(call):
@@ -333,75 +335,6 @@ def handle_additional_options(call):
         types.InlineKeyboardButton(text="🏠Главное меню🏠", callback_data="send_main_menu"))
     bot.send_message(call.message.chat.id, "Выберите действие", reply_markup=keyboard)
 
-menu_keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
-btnscreen = types.KeyboardButton('📷Сделать скриншот')
-btnmouse = types.KeyboardButton('🖱Управление мышкой')
-btnfiles = types.KeyboardButton('📂Файлы и процессы')
-btnaddit = types.KeyboardButton('❇️Дополнительно')
-btnmsgbox = types.KeyboardButton('📩Отправка уведомления')
-btn_record_screen = types.KeyboardButton('🎥Записать экран')
-btn_record_screen_stop = types.KeyboardButton('🎥Остановить запись')
-btnpaste = types.KeyboardButton('�Вставить текст')
-btninfo = types.KeyboardButton('❗️Информация')
-btnpro = types.KeyboardButton('👾Для проффесионалов')
-btn_emulate_keys = types.KeyboardButton('⌨️Эмулировать нажатие клавиш')
-btn_block_input = types.KeyboardButton('Заблокировать ввод')
-btn_unblock_input = types.KeyboardButton('Разблокировать ввод')
-menu_keyboard.row(btnscreen, btnmouse)
-menu_keyboard.row(btnpaste, btn_record_screen)
-menu_keyboard.row(btn_record_screen_stop, btn_emulate_keys)
-menu_keyboard.row(btnfiles, btnaddit)
-menu_keyboard.row(btninfo, btnmsgbox)
-menu_keyboard.row(btn_block_input, btn_unblock_input)
-menu_keyboard.row(btnpro)
-
-files_keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
-btnstart = types.KeyboardButton('✔️Запустить')
-btnkill = types.KeyboardButton('❌Завершить процесс')
-btndown = types.KeyboardButton('⬇️Скачать файл')
-btnupl = types.KeyboardButton('⬆️Загрузить файл')
-btnurldown = types.KeyboardButton('�Загрузить по ссылке')
-btnback = types.KeyboardButton('⏪Назад⏪')
-files_keyboard.row(btnstart, btnkill)
-files_keyboard.row(btndown, btnupl)
-files_keyboard.row(btnurldown, btnback)
-
-additionals_keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
-btnweb = types.KeyboardButton('🔗Перейти по ссылке')
-btncmd = types.KeyboardButton('✅Выполнить команду')
-btnoff = types.KeyboardButton('⛔️Выключить компьютер')
-btnreb = types.KeyboardButton('♻️Перезагрузить компьютер')
-btninfo = types.KeyboardButton('�О компьютере')
-btnproccesses = types.KeyboardButton('Процессы')
-btnback = types.KeyboardButton('⏪Назад⏪')
-additionals_keyboard.row(btnoff, btnreb)
-additionals_keyboard.row(btncmd, btnweb)
-additionals_keyboard.row(btninfo, btnback)
-additionals_keyboard.row(btnproccesses)
-
-mouse_keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
-btnup = types.KeyboardButton('⬆️')
-btndown = types.KeyboardButton('⬇️')
-btnleft = types.KeyboardButton('⬅️')
-btnright = types.KeyboardButton('➡️')
-btnclick = types.KeyboardButton('🆗')
-btnback = types.KeyboardButton('⏪Назад⏪')
-btncurs = types.KeyboardButton('Указать размах курсора')
-mouse_keyboard.row(btnup)
-mouse_keyboard.row(btnleft, btnclick, btnright)
-mouse_keyboard.row(btndown)
-mouse_keyboard.row(btnback, btncurs)
-
-pro_keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
-btnsafe = types.KeyboardButton('🔄Безопасный режим')
-btnsafecmd = types.KeyboardButton('🔄Безопасный с командной строкой')
-btnstartdiagnostic = types.KeyboardButton('🧬Запустить диагностику')
-btnturnonbrandmwr = types.KeyboardButton('🔌Включить брандмауэр')
-btnoffbrandmwr = types.KeyboardButton('🚫Выключить брандмауэр')
-pro_keyboard.row(btnsafe, btnsafecmd)
-pro_keyboard.row(btnstartdiagnostic)
-pro_keyboard.row(btnturnonbrandmwr, btnoffbrandmwr)
-pro_keyboard.row(btnback)
 
 info_msg = '''
 *О командах*
@@ -429,263 +362,7 @@ else:
     f = open('msg.pt', 'tw', encoding='utf-8')
     f.close
 
-bot.send_message(my_id, "WindowsToolsBot запущен", reply_markup=menu_keyboard)
-
-@bot.message_handler(content_types=["text"])
-def get_text_messages(message):
-    if str(message.from_user.id) == my_id:
-        bot.send_chat_action(my_id, 'typing')
-        if message.text == "📷Сделать скриншот":
-            bot.register_next_step_handler(message, screenshot)
-
-        elif message.text == "🖱Управление мышкой":
-            bot.send_message(my_id, "🖱Управление мышкой", reply_markup=mouse_keyboard)
-            bot.register_next_step_handler(message, mouse_process)
-
-        elif message.text == "⏪Назад⏪":
-            back(message)
-
-        elif message.text == "📂Файлы и процессы":
-            bot.send_message(my_id, "📂Файлы и процессы", reply_markup=files_keyboard)
-            bot.register_next_step_handler(message, files_process)
-
-        elif message.text == "❇️Дополнительно":
-            bot.send_message(my_id, "❇️Дополнительно", reply_markup=additionals_keyboard)
-            bot.register_next_step_handler(message, addons_process)
-
-        elif message.text == "📩Отправка уведомления":
-            bot.send_message(my_id, "Укажите текст уведомления:")
-            bot.register_next_step_handler(str.replace(message), messaga_process)
-            
-        elif message.text == "❗️Информация":
-            bot.send_message(my_id, info_msg, parse_mode="markdown")
-
-        elif message.text == "👾Для проффесионалов":
-            bot.send_message(my_id, "👾Для проффесионалов", reply_markup=pro_keyboard)
-            bot.register_next_step_handler(message, pro_func)
-
-        elif message.text == "📋Вставить текст":
-            bot.send_message(my_id, "Укажите текст для вставки:")
-            bot.register_next_step_handler(message, paste_text)
-
-        elif message.text == "🎥Записать экран":
-            start_recording(message)
-        elif message.text.lower() == "🎥Остановить запись":
-            stop_recording(message)
-
-        elif message.text == "⌨️Эмулировать нажатие клавиш":
-            bot.send_message(my_id, "Укажите клавиши для эмуляции (например, 'ctrl c' для копирования):")
-            bot.register_next_step_handler(message, emulate_keypress)
-
-        elif message.text == "Заблокировать ввод":
-            block_input()
-            
-            
-        elif message.text == "Разблокировать ввод":
-            bot.send_message(my_id, "Введите код с экрана")
-            bot.register_next_step_handler(message, check_code)
-             
-            
-        else:
-            pass
-
-    else:
-        info_user(message)
-
-def screenshot(message):
-            bot.send_chat_action(my_id, 'upload_photo')
-            try:
-                currentMouseX, currentMouseY = mouse.get_position()
-                img = PIL.ImageGrab.grab()
-                img.save("screen.png", "png")
-                img = Image.open("screen.png")
-                draw = ImageDraw.Draw(img)
-                draw.polygon((currentMouseX, currentMouseY, currentMouseX, currentMouseY + 15, currentMouseX + 10, currentMouseY + 10), fill="white", outline="black")
-                img.save("screen_with_mouse.png", "PNG")
-                bot.send_photo(my_id, open("screen_with_mouse.png", "rb"))
-                os.remove("screen.png")
-                os.remove("screen_with_mouse.png")
-            except:
-                bot.send_message(my_id, "Компьютер заблокирован")
-
-def pro_func(message):
-    if str(message.from_user.id) == my_id:
-        bot.send_chat_action(my_id, 'typing')
-        if message.text == '🔄Безопасный режим':
-            os.system('bcdedit /set {default} safeboot minimal')
-            os.system('shutdown /r /t 1')
-            bot.register_next_step_handler(message, pro_func)
-        elif message.text == '🔄Безопасный с командной строкой':
-            os.system('bcdedit /set {default} safeboot minimal')
-            os.system('bcdedit /set {default} safebootalternateshell yes')
-            os.system('shutdown /r')
-            bot.register_next_step_handler(message, pro_func)
-        elif message.text == "🧬Запустить диагностику":
-            run_diagnostics(message)
-            bot.register_next_step_handler(message, pro_func)
-        elif message.text == "🔌Включить брандмауэр":
-            toggle_firewall('enable')
-            bot.register_next_step_handler(message, pro_func)
-        elif message.text == "🚫Выключить брандмауэр":
-            toggle_firewall('disable')
-            bot.register_next_step_handler(message, pro_func)
-        elif message.text == "⏪Назад⏪":
-            back(message)
-            bot.register_next_step_handler(message, pro_func)
-        else:
-            pass
-    else:
-        info_user(message)
-
-def paste_text(message):
-    bot.send_chat_action(my_id, 'typing')
-    text_to_paste = message.text.strip()
-    pyperclip.copy(text_to_paste)
-    pyautogui.hotkey('ctrl', 'v')  
-    bot.send_message(my_id, f"Текст \"{text_to_paste}\" вставлен в активное поле ввода.")
-    send_main_menu(message)  
-
-def addons_process(message):
-    if str(message.from_user.id) == my_id:
-        bot.send_chat_action(my_id, 'typing')
-        if message.text == "🔗Перейти по ссылке":
-            bot.send_message(my_id, "Укажите ссылку: ")
-            bot.register_next_step_handler(message, web_process)
-
-        elif message.text == "✅Выполнить команду":
-            bot.send_message(my_id, "Укажите консольную команду: ")
-            bot.register_next_step_handler(message, cmd_process)
-
-        elif message.text == "⛔ ️Выключить компьютер":
-            bot.send_message(my_id, "Выключение компьютера...")
-            os.system('shutdown -s /t 0 /f')
-            bot.register_next_step_handler(message, addons_process)
-
-        elif message.text == "♻️Перезагрузить компьютер":
-            bot.send_message(my_id, "Перезагрузка компьютера...")
-            os.system('shutdown -r /t 0 /f')
-            bot.register_next_step_handler(message, addons_process)
-
-        elif message.text == "🖥О компьютере":
-            system_info()
-            bot.register_next_step_handler(message, addons_process)
-
-        elif message.text == "Процессы":
-            if str(message.from_user.id) == my_id:
-                bot.send_chat_action(my_id, 'typing')
-                
-                # Получаем список процессов
-                processes_names = {process.name() for process in process_iter()}
-                elements_to_remove = {
-                    'System', 
-                    'System Idle Process', 
-                    'taskhostw.exe', 
-                    'svchost.exe', 
-                    'csrss.exe', 
-                    'RuntimeBroker.exe', 
-                    'Registry', 
-                    'services.exe', 
-                    'wininit.exe', 
-                    'winlogon.exe', 
-                    'dllhost.exe', 
-                    'powershell.exe', 
-                    'conhost.exe', 
-                    'explorer.exe', 
-                    'sihost.exe'
-                }
-                
-                
-                for element in elements_to_remove:
-                    processes_names.discard(element)
-                
-                
-                sorted_processes = sorted(processes_names)
-                numbered_processes = '\n'.join(f"{i + 1}. {process}" for i, process in enumerate(sorted_processes))
-
-                
-                bot.send_message(my_id, numbered_processes)
-                
-                
-                bot.send_message(my_id, 'Хотите ли вы завершить какой-нибудь процесс? (да/нет)')
-                bot.register_next_step_handler(message, confirm_kill_process)  
-                bot.register_next_step_handler(message, addons_process)
-                
-            elif message.text == "⏪Назад⏪":
-                back(message)
-
-        else:
-            pass
-
-    else:
-        info_user(message)
-
-def files_process(message):
-    if str(message.from_user.id) == my_id:
-        bot.send_chat_action(my_id, 'typing')
-        if message.text == "❌Завершить процесс":
-            bot.send_message(my_id, "Укажите название процесса: ")
-            bot.register_next_step_handler(message, kill_process)
-
-        elif message.text == "✔️Запустить":
-            bot.send_message(my_id, "Укажите путь до файла: ")
-            bot.register_next_step_handler(message, start_process)
-
-        elif message.text == "⬇️Скачать файл":
-            bot.send_message(my_id, "Укажите путь до файла: ")
-            bot.register_next_step_handler(message, downfile_process)
-
-        elif message.text == "⬆️Загрузить файл":
-            bot.send_message(my_id, "Отправьте необходимый файл")
-            bot.register_next_step_handler(message, uploadfile_process)
-
-        elif message.text == "🔗Загрузить по ссылке":
-            bot.send_message(my_id, "Укажите прямую ссылку скачивания:")
-            bot.register_next_step_handler(message, uploadurl_process)
-
-        elif message.text == "⏪Назад⏪":
-            back(message)
-
-        else:
-            pass
-    else:
-        info_user(message)
-
-def record_screen():
-    global is_recording
-    screen_size = (1920, 1080)  
-    fourcc = cv2.VideoWriter_fourcc(*"XVID")
-    out = cv2.VideoWriter("screen_recording.avi", fourcc, 20.0, screen_size)
-
-    is_recording = True
-    while is_recording:
-        img = pyautogui.screenshot()
-        frame = np.array(img)
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        out.write(frame)
-
-    out.release()
-
-def start_recording(message):
-    bot.send_message(my_id, "Начинаю запись экрана...")
-    recording_thread = threading.Thread(target=record_screen)
-    recording_thread.start()
-    
-    bot.send_message(my_id, "Запись экрана идет. Чтобы остановить запись, введите/нажмите на кнопку '🎥Остановить запись'.")
-
-def stop_recording(message):
-    global is_recording
-    is_recording = False  
-    bot.send_message(my_id, "Запись экрана завершена. Отправляю файл...")
-    send_recording(my_id)
-    send_main_menu(message)
-
-def send_recording(message):
-    try:
-        with open("screen_recording.avi", "rb") as video_file:
-            bot.send_video(my_id, video_file)
-        bot.send_message(my_id, "Запись экрана успешно отправлена.")
-    except Exception as e:
-        bot.send_message(my_id, f"Ошибка при отправке записи экрана: {str(e)}")
+bot.send_message(my_id, "WindowsToolsBot запущен")
 
 def emulate_keypress(message):
     bot.send_chat_action(my_id, 'typing')
@@ -701,48 +378,6 @@ def emulate_keypress(message):
     
     send_main_menu(message)  
 
-def mouse_process(message):
-    if str(message.from_user.id) == my_id:
-        if message.text == "⬆️":
-            currentMouseX, currentMouseY = mouse.get_position()
-            mouse.move(currentMouseX, currentMouseY - User.curs)
-            screen_process(message)
-
-        elif message.text == "⬇️":
-            currentMouseX, currentMouseY = mouse.get_position()
-            mouse.move(currentMouseX, currentMouseY + User.curs)
-            screen_process(message)
-
-        elif message.text == "⬅️":
-            currentMouseX, currentMouseY = mouse.get_position()
-            mouse.move(currentMouseX - User.curs, currentMouseY)
-            screen_process(message)
-
-        elif message.text == "➡️":
-            currentMouseX, currentMouseY = mouse.get_position()
-            mouse.move(currentMouseX + User.curs, currentMouseY)
-            screen_process(message)
-
-        elif message.text == "🆗":
-            mouse.click()
-            screen_process(message)
-
-        elif message.text == "Указать размах курсора":
-            bot.send_chat_action(my_id, 'typing')
-            system_info(message)
-
-        elif message.text == "⏪Назад⏪":
-            back(message)
-
-        else:
-            pass
-    else:
-        info_user(message)
-
-def generate_random_code(length):
-    """Generate a random code of specified length."""
-    characters = string.ascii_letters + string.digits
-    return ''.join(random.choice(characters) for _ in range(length))
 
 def block_input():
     global unlock_code, overlay
@@ -767,13 +402,6 @@ def check_code(message):
         ctypes.windll.user32.BlockInput(False)
         overlay.destroy()
      
-def send_notification(message):
-    toaster = ToastNotifier()
-    toaster.show_toast(
-        "Уведомление",  
-        message,        
-        duration=10     
-    )
 
 def system_info():
     bot.send_chat_action(my_id, 'typing')
@@ -805,63 +433,18 @@ def screen_process(message):
         draw.polygon((currentMouseX, currentMouseY, currentMouseX, currentMouseY + 15, currentMouseX + 10, currentMouseY + 10), fill="white", outline="black")
         img.save("screen_with_mouse.png", "PNG")
         bot.send_photo(my_id, open("screen_with_mouse.png", "rb"))
-        bot.register_next_step_handler(message, mouse_process)
         os.remove("screen.png")
         os.remove("screen_with_mouse.png")
     except:
-        bot.register_next_step_handler(message, mouse_process)
-
+        pass
 def mousecurs_settings(message):
     bot.send_chat_action(my_id, 'typing')
     if is_digit(message.text) == True:
         User.curs = int(message.text)
-        bot.send_message(my_id, f"Размах курсора изменен на {str(User.curs)}px", reply_markup=mouse_keyboard)
-        bot.register_next_step_handler(message, mouse_process)
+        bot.send_message(my_id, f"Размах курсора изменен на {str(User.curs)}px")
     else:
-        bot.send_message(my_id, "Введите целое число: ", reply_markup=mouse_keyboard)
+        bot.send_message(my_id, "Введите целое число:")
         bot.register_next_step_handler(message, mousecurs_settings)
-
-def messaga_process(message):
-	bot.send_chat_action(my_id, 'typing')
-	try:
-		MessageBox(None, message.text, 'WindowsToolsBot', 0)
-		bot.send_message(my_id, f"Уведомление с текстом \"{message.text}\" было закрыто")
-	except:
-		bot.send_message(my_id, "Ошибка")
-
-def set_curs_range(message):
-    global curs_range
-    try:
-        curs_range = int(message.text)
-        bot.send_message(my_id, f"Размах курсора изменен на {curs_range}px")
-    except:
-        pass
-
-def run_diagnostics(message):
-    bot.send_chat_action(my_id, 'typing')
-    try:
-        # Запуск проверки диска
-        disk_check = subprocess.run(['chkdsk'], capture_output=True, text=True)
-        memory_check = subprocess.run(['mdsched.exe'], capture_output=True, text=True)
-
-        # Формируем сообщение с результатами
-        result = f"Результаты проверки диска:\n{disk_check.stdout}\n\n"
-        result += f"Результаты проверки памяти:\n{memory_check.stdout}"
-
-        bot.send_message(my_id, result)
-    except Exception as e:
-        bot.send_message(my_id, f"Ошибка при выполнении диагностики: {str(e)}")
-
-def toggle_firewall(state):
-    try:
-        if state == "enable":
-            os.system('netsh advfirewall set allprofiles state on')
-            return "Брандмауэр включен."
-        elif state == "disable":
-            os.system('netsh advfirewall set allprofiles state off')
-            return "Брандмауэр выключен."
-    except Exception as e:
-        return f"Ошибка при изменении состояния брандмауэра: {str(e)}"
 
 def uploadurl_2process(message):
     bot.send_chat_action(my_id, 'typing')
@@ -870,37 +453,9 @@ def uploadurl_2process(message):
         obj = SmartDL(User.urldown, User.fin, progress_bar=False)
         obj.start()
         bot.send_message(my_id, f"Файл успешно сохранён по пути \"{User .fin}\"")
-        bot.register_next_step_handler(message, files_process)
+        
     except:
-        bot.send_message(my_id, "Указаны неверная ссылка или путь")
-        bot.register_next_step_handler(message, addons_process)
-
-def send_message_with_keyboard(user_id, text, keyboard):
-    bot.send_message(user_id, text, reply_markup=keyboard)
-
-def back(message):
-    bot.register_next_step_handler(message, get_text_messages)
-    send_message_with_keyboard(my_id, "Вы в главном меню", menu_keyboard)
-
-def info_user(message):
-    if str(message.from_user.id) != my_id:
-        bot.send_chat_action(my_id, 'typing')
-        alert = f"Кто-то пытался задать команду: \"{message.text}\"\n\n"
-        alert += f"user id: {str(message.from_user.id)}\n"
-        alert += f"first name: {str(message.from_user.first_name)}\n"
-        alert += f"last name: {str(message.from_user.last_name)}\n" 
-        alert += f"username: @{str(message.from_user.username)}"
-        send_message_with_keyboard(my_id, alert, menu_keyboard)
-
-def kill_process(message):
-    bot.send_chat_action(my_id, 'typing')
-    try:
-        os.system("taskkill /IM " + message.text + " -F")
-        bot.send_message(my_id, f"Процесс \"{message.text}\" был завершен", reply_markup=files_keyboard)
-        bot.register_next_step_handler(message, files_process)
-    except:
-        bot.send_message(my_id, "Ошибка! Процесс не найден", reply_markup=files_keyboard)
-        bot.register_next_step_handler(message, files_process)
+        bot.send_message(my_id, "Указаны неверная ссылка или путь")  
 
 def kill_process_by_number(message):
     bot.send_chat_action(my_id, 'typing')
@@ -950,101 +505,6 @@ def kill_process_by_number(message):
     else:
         bot.send_message(my_id, "Пожалуйста, введите номер процесса.")
         bot.register_next_step_handler(message, kill_process_by_number)  # Повторяем запрос
-
-def start_process(message):
-    bot.send_chat_action(my_id, 'typing')
-    try:
-        os.startfile(r'' + message.text)
-        bot.send_message(my_id, f"Файл по пути \"{message.text}\" запустился", reply_markup=files_keyboard)
-        bot.register_next_step_handler(message, files_process)
-    except:
-        bot.send_message(my_id, "Ошибка! Указан неверный файл", reply_markup=files_keyboard)
-        bot.register_next_step_handler(message, files_process)
-
-def web_process(message):
-    bot.send_chat_action(my_id, 'typing')
-    try:
-        webbrowser.open(message.text, new=0)
-        bot.send_message(my_id, f"Переход по ссылке \"{message.text}\" осуществлён", reply_markup=additionals_keyboard)
-        bot.register_next_step_handler(message, addons_process)
-    except:
-        bot.send_message(my_id, "Ошибка! ссылка введена неверно")
-        bot.register_next_step_handler(message, addons_process)
-
-def cmd_process(message):
-    bot.send_chat_action(my_id, 'typing')
-    try:
-        os.system(message.text)
-        bot.send_message(my_id, f"Команда \"{message.text}\" выполнена", reply_markup=additionals_keyboard)
-        bot.register_next_step_handler(message, addons_process)
-    except:
-        bot.send_message(my_id, "Ошибка! Неизвестная команда")
-        bot.register_next_step_handler(message, addons_process)
-
-def say_process(message):
-    bot.send_chat_action(my_id, 'typing')
-    bot.send_message(my_id, "В разработке...", reply_markup=menu_keyboard)
-
-def downfile_process(message):
-    bot.send_chat_action(my_id, 'typing')
-    try:
-        file_path = message.text
-        if os.path.exists(file_path):
-            bot.send_message(my_id, "Файл загружается, подождите...")
-            bot.send_chat_action(my_id, 'upload_document')
-            file_doc = open(file_path, 'rb')
-            bot.send_document(my_id, file_doc)
-            bot.register_next_step_handler(message, files_process)
-        else:
-            bot.send_message(my_id, "Файл не найден или указан неверный путь (ПР.: C:\\Documents\\File.doc)")
-            bot.register_next_step_handler(message, files_process)
-    except:
-        bot.send_message(my_id, "Ошибка! Файл не найден или указан неверный путь (ПР.: C:\\Documents\\File.doc)")
-        bot.register_next_step_handler(message, files_process)
-
-def uploadfile_process(message):
-    bot.send_chat_action(my_id, 'typing')
-    try:
-        file_info = bot.get_file(message.document.file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        src = message.document.file_name
-        with open(src, 'wb') as new_file:
-            new_file.write(downloaded_file)
-        bot.send_message(my_id, "Файл успешно загружен")
-        bot.register_next_step_handler(message, files_process)
-    except:
-        bot.send_message(my_id, "Ошибка! Отправьте файл как документ(нельзя сжимать)")
-        bot.register_next_step_handler(message, files_process)
-
-def uploadurl_process(message):
-    bot.send_chat_action(my_id, 'typing')
-    User.urldown = message.text
-    bot.send_message(my_id, "Укажите путь сохранения файла:")
-    bot.register_next_step_handler(message, uploadurl_2process)
-
-def is_digit(string):
-    if string.isdigit():
-        return True
-    else:
-        try:
-            float(string)
-            return True
-        except ValueError:
-            return False
-
-def confirm_kill_process(message):
-    if str(message.from_user.id) == my_id:
-        response = message.text.strip().lower()
-        
-        if response == 'да':
-            bot.send_message(my_id, 'Укажите номер процесса, который хотите завершить:')
-            bot.register_next_step_handler(message, kill_process_by_number)  # Переход к функции завершения процесса по номеру
-        elif response == 'нет':
-            bot.send_message(my_id, 'Вы решили не завершать процессы. Возвращаемся в главное меню.')
-            back(message)  # Возвращаемся в главное меню
-        else:
-            bot.send_message(my_id, 'Пожалуйста, ответьте "да" или "нет".')
-            bot.register_next_step_handler(message, confirm_kill_process)  # Повторяем запрос
 
 while True:
     try:
